@@ -1,5 +1,6 @@
-#include <openssl/evp.h>
 #include "mainwindow.h"
+
+#include <openssl/evp.h>
 
 QByteArray MainWindow::encryptData(const QByteArray &data)
 {

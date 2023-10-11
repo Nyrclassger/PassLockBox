@@ -1,5 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "key_missing_warning.h"
+#include "ui_key_missing_warning.h"
 
 #include <QSqlRecord>
 #include <QSqlError>
@@ -23,26 +25,13 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // Load the encryption key from key.dat file
-    QFile keyFile("key.dat");
-    if (keyFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QTextStream in(&keyFile);
-        KEY = in.readAll().toUtf8().constData(); // Read the key and convert to const char*
-        keyFile.close();
-
-        ui->encryptionKeyEdit->setText(KEY);
-        qDebug() << "Encryption key loaded from key.dat";
-    } else {
-        qDebug() << "Failed to open key.dat: " << keyFile.errorString();
-    }
-
-    initializeDatabase();
-
-    ui->treeView->setModel(model);
+    loadEncryptDecryptKey(); // Load encryption key from the key.dat file
+    initializeDatabase(); // Initialize the SQLite database
+    ui->treeView->setModel(model); // Set the treeView's model to the Categories model
 
     // Loading data from the database
     loadCategoriesAndElements();
-    updateCategoryBox();
+    updateCategoryBox(); // Populate the category selection box
 }
 
 MainWindow::~MainWindow()
@@ -52,11 +41,39 @@ MainWindow::~MainWindow()
     delete elementsModel;
 }
 
+void MainWindow::loadEncryptDecryptKey()
+{
+    QFile keyFile("key.dat"); // Open the key file
+
+    if (keyFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&keyFile);
+        QString keyData = in.readAll();
+        keyFile.close();
+
+        // Convert the key to a const char*
+        KEY = keyData.toUtf8().constData(); // Store the encryption key
+
+        qDebug() << "Encryption key loaded from key.dat";
+        ui->warningLabel->setVisible(false);
+        ui->learnMoreKeyMissingButton->setVisible(false);
+
+        ui->addItemButton->setEnabled(true);
+        ui->addCategoryButton->setEnabled(true);
+        ui->encryptionKeyEdit->setText(KEY); // Display the loaded encryption key
+    } else {
+        qDebug() << "Failed to open key.dat: " << keyFile.errorString();
+        ui->warningLabel->setVisible(true);
+        ui->learnMoreKeyMissingButton->setVisible(true);
+
+        ui->addItemButton->setEnabled(false);
+        ui->addCategoryButton->setEnabled(false);
+    }
+}
+
 void MainWindow::initializeDatabase()
 {
-    // Initialize the SQLite database
-    db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("./fileDB.db");
+    db = QSqlDatabase::addDatabase("QSQLITE"); // Set the database type to SQLite
+    db.setDatabaseName("./fileDB.db"); // Set the database file name
 
     if (db.open()) {
         qDebug() << "Database opened successfully";
@@ -65,7 +82,7 @@ void MainWindow::initializeDatabase()
         // Handle the error, perhaps show a message to the user
     }
 
-    query = new QSqlQuery(db);
+    query = new QSqlQuery(db); // Create a new QSqlQuery instance
 
     // Create tables if they do not exist
     query->exec("CREATE TABLE IF NOT EXISTS Categories ("
@@ -79,12 +96,11 @@ void MainWindow::initializeDatabase()
                 "element_password TEXT,"
                 "category_id INTEGER)");
 
-    // Create and configure the model for displaying data
-    model = new QSqlTableModel(this);
-    model->setTable("Categories"); // Display categories in QTreeView
+    model = new QSqlTableModel(this); // Create a new QSqlTableModel
+    model->setTable("Categories"); // Set the table for the model
     model->select();
 
-    ui->treeView->setModel(model);
+    ui->treeView->setModel(model); // Set the treeView's model to display categories
 
     // Load data from the database
     loadCategoriesAndElements();
@@ -377,14 +393,17 @@ void MainWindow::on_generateButton_clicked()
 
     int passwordLength = ui->lengthPasswordEdit->text().toInt();
 
+    // Check if no character types are selected
     if (!includeLetters && !includeNumbers && !includeSpecialChars && !includeUpperCase)
     {
-        ui->generatePasswordEdit->setText("???");
-        return;
+        ui->generatePasswordEdit->setStyleSheet("border: 1px solid red;");
+        ui->generatePasswordEdit->setPlaceholderText("No parameters selected!");
+        return; // Exit the function
     }
 
-    // Define available characters for generation
+    // Define available characters for password generation
     QString availableChars = "";
+
     if (includeLetters)
     {
         if (includeUpperCase)
@@ -400,6 +419,13 @@ void MainWindow::on_generateButton_clicked()
     for (const QChar& excludedChar : excludedChars)
     {
         availableChars.remove(excludedChar);
+    }
+
+    // Check if availableChars is empty
+    if (availableChars.isEmpty())
+    {
+        ui->generatePasswordEdit->setText("No characters available for generation.");
+        return;
     }
 
     // Generate the password
@@ -455,7 +481,15 @@ void MainWindow::on_auditPasswordButton_clicked()
 
 void MainWindow::on_encryptionKeyButton_clicked()
 {
-    QString keyData = ui->encryptionKeyEdit->text();
+    QString keyData = ui->encryptionKeyEdit->text().trimmed(); // Remove leading and trailing spaces
+
+    if (keyData.isEmpty()) {
+        // Empty value, set an error message
+        ui->encryptionKeyEdit->setStyleSheet("border: 1px solid red;");
+        ui->encryptionKeyEdit->setPlaceholderText("Key cannot be empty");
+        return; // Exit the function
+    }
+
     QFile file("key.dat");
 
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -463,9 +497,26 @@ void MainWindow::on_encryptionKeyButton_clicked()
         out << keyData;
         file.close();
         qDebug() << "Key data saved to key.dat";
+
+        loadEncryptDecryptKey();
+
+        ui->warningLabel->setVisible(false);
+        ui->learnMoreKeyMissingButton->setVisible(false);
+
+        ui->addItemButton->setEnabled(true);
+        ui->addCategoryButton->setEnabled(true);
+
+        // Reset styles and error text if the key is successfully saved
+        ui->encryptionKeyEdit->setStyleSheet(""); // Remove styles
+        ui->encryptionKeyEdit->setPlaceholderText(""); // Remove error text
     } else {
         qDebug() << "Failed to create or open key.dat: " << file.errorString();
     }
 }
 
+void MainWindow::on_learnMoreKeyMissingButton_clicked()
+{
+    key_missing_warning *key_warning = new key_missing_warning();
+    key_warning->show();
+}
 

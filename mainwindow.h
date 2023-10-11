@@ -1,6 +1,8 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "ui_key_missing_warning.h"
+
 #include <QMainWindow>
 #include <QDebug>
 #include <QSqlDatabase>
@@ -51,6 +53,10 @@ private slots:
 
     void on_encryptionKeyButton_clicked();
 
+    void on_learnMoreKeyMissingButton_clicked();
+
+    void loadEncryptDecryptKey();
+
 private:
     Ui::MainWindow *ui;
 
@@ -66,7 +72,9 @@ private:
 
     QStandardItemModel *categoryModel;
 
-    QSqlTableModel* elementsModel;
+    QSqlTableModel *elementsModel;
+
+    QModelIndex selectedIndex;
 
     // Encryption and Decryption functions
     QByteArray encryptData(const QByteArray &data);
